@@ -13,6 +13,21 @@ Installs LiveKit Server, LiveKit CLI, LiveKit SIP Bridge, Docker, and Redis. Con
 ### `install-agent.sh`
 Sets up a Python voice agent with PM2 process manager. Installs required Python dependencies and configures the agent as a systemd service for automatic restart.
 
+## ⚠️ Important: API Keys are Placeholders!
+
+The agent currently has placeholder keys configured after installation. You **must** edit the `.env` file and replace them with real API keys:
+
+- `LLM_API_KEY=placeholder-llm-key`
+- `DEEPGRAM_API_KEY=placeholder-deepgram-key`
+- `INWORLD_API_KEY=placeholder-inworld-key`
+
+After editing:
+
+```bash
+nano /root/livekit/agent/.env
+pm2 restart livekit-agent
+```
+
 ## Files
 
 | File | Purpose |
