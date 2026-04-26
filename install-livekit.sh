@@ -5,6 +5,9 @@
 # Does NOT touch existing Vicidial installation.
 set -euo pipefail
 
+LOGFILE="$(pwd)/install-livekit-$(date '+%Y%m%d-%H%M%S').log"
+exec > >(tee "$LOGFILE") 2>&1
+
 LIVEKIT_VERSION="${LIVEKIT_VERSION:-1.11.0}"
 CLI_VERSION="${CLI_VERSION:-2.16.2}"
 PROJECT_DIR="${PROJECT_DIR:-/root/livekit}"
@@ -12,7 +15,7 @@ REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 LK_API_KEY="${LK_API_KEY:-}"
 LK_API_SECRET="${LK_API_SECRET:-}"
 LIVEKIT_PORT="${LIVEKIT_PORT:-7880}"
-SIP_PORT="${SIP_PORT:-5061}"
+SIP_PORT="${SIP_PORT:-5071}"
 
 if [ -z "$REDIS_PASSWORD" ]; then
   REDIS_PASSWORD=$(openssl rand -hex 32)
@@ -37,7 +40,8 @@ apt-get install -y -qq curl wget gnupg ca-certificates openssl tar gzip \
 
 # ------------------------------------------------------------------
 log "Step 2/9: Redis installation + Autostart"
-systemctl enable redis-server 2>/dev/null || true
+systemctl stop redis-server 2>/dev/null || true
+mkdir -p /var/lib/redis
 cat > /etc/redis/redis.conf <<'REDISEOF'
 bind 127.0.0.1 ::1
 port 6379
@@ -58,6 +62,7 @@ cat > /etc/systemd/system/redis-server.service.d/timeout.conf <<'UNITEOF'
 TimeoutStopSec=30
 UNITEOF
 systemctl daemon-reload
+systemctl enable redis-server 2>/dev/null || true
 systemctl restart redis-server 2>/dev/null || systemctl start redis-server
 sleep 2
 redis-cli -a "$REDIS_PASSWORD" CONFIG SET stop-writes-on-bgsave-error no 2>/dev/null || true
@@ -183,9 +188,11 @@ log "  SIP Bridge on port $SIP_PORT"
 
 # ------------------------------------------------------------------
 log "Step 8/9: Pull Egress + Ingress images"
-docker pull livekit/egress:latest >/dev/null 2>&1 &
-docker pull livekit/ingress:latest >/dev/null 2>&1 &
-wait
+for img in livekit/egress:latest livekit/ingress:latest; do
+  if ! docker image inspect "$img" >/dev/null 2>&1; then
+    timeout 300 docker pull "$img" >/dev/null 2>&1 || log "  WARN: could not pull $img"
+  fi
+done
 log "  Egress + Ingress cached"
 
 # ------------------------------------------------------------------

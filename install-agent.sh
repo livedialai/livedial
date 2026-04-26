@@ -4,6 +4,9 @@
 # Prompts for API keys and installs the agent with PM2.
 set -euo pipefail
 
+LOGFILE="$(pwd)/install-agent-$(date '+%Y%m%d-%H%M%S').log"
+exec > >(tee "$LOGFILE") 2>&1
+
 PROJECT_DIR="${PROJECT_DIR:-/root/livekit}"
 AGENT_DIR="$PROJECT_DIR/agent"
 LIVEKIT_URL="${LIVEKIT_URL:-ws://127.0.0.1:7880}"
