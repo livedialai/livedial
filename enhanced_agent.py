@@ -38,12 +38,32 @@ INWORLD_API_KEY = os.getenv("INWORLD_API_KEY", "")
 INWORLD_BASE_URL = os.getenv("INWORLD_BASE_URL", "https://api.inworld.ai/v1")
 INWORLD_VOICE_ID = os.getenv("INWORLD_VOICE_ID", "default-gir-n2kfw-hbdko0a0q9lw__multi-de")
 
-AGENT_INSTRUCTIONS = os.getenv(
-    "AGENT_INSTRUCTIONS",
-    "Du bist ein hilfreicher KI-Sprachassistent in einem Telefonat. "
-    "Sei höflich, professionell und antworte präzise auf Deutsch. "
-    "Halte deine Antworten kurz und natürlich.",
+# ── Load prompts from files ───────────────────────────────────────────
+AGENT_DIR = os.path.dirname(__file__)
+
+def load_prompt_file(filename: str, fallback: str) -> str:
+    filepath = os.path.join(AGENT_DIR, filename)
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+        if content:
+            logging.getLogger("livekit-enhanced-agent").info(f"✅ Loaded prompt from {filename}")
+            return content
+    except Exception as exc:
+        logging.getLogger("livekit-enhanced-agent").warning(f"Could not load {filename}: {exc}, using fallback")
+    return fallback
+
+VERKAUF_PROMPT = load_prompt_file(
+    "verkaufsprompt.txt",
+    os.getenv(
+        "AGENT_INSTRUCTIONS",
+        "Du bist ein hilfreicher KI-Sprachassistent in einem Telefonat. "
+        "Sei höflich, professionell und antworte präzise auf Deutsch. "
+        "Halte deine Antworten kurz und natürlich.",
+    )
 )
+
+AGENT_INSTRUCTIONS = VERKAUF_PROMPT  # Use sales prompt as main instructions
 
 VICIDIAL_URL = os.getenv("VICIDIAL_URL", "")
 VICIDIAL_USER = os.getenv("VICIDIAL_USER", "")
@@ -54,9 +74,11 @@ VICIDIAL_NEGATIV_STATUS = os.getenv("VICIDIAL_NEGATIV_STATUS", "XFER")
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 MAX_CALL_DURATION = int(os.getenv("MAX_CALL_DURATION_SECONDS", "600"))
 
-ENTSCHEIDER_PROMPT = os.getenv(
-    "ENTSCHEIDER_PROMPT",
-    """Analysieren Sie das Gespräch und bestimmen Sie das Ergebnis.
+ENTSCHEIDER_PROMPT = load_prompt_file(
+    "entscheiderprompt.txt",
+    os.getenv(
+        "ENTSCHEIDER_PROMPT",
+        """Analysieren Sie das Gespräch und bestimmen Sie das Ergebnis.
 Antworten Sie NUR mit einem JSON-Objekt in exakt diesem Format:
 
 {
@@ -71,6 +93,7 @@ KATEGORIEN:
 - UNKLAR: Gespräch wurde abgebrochen, Kunde antwortet nicht mehr, technische Probleme, oder völlig unklar
 
 Antworten Sie NUR mit dem JSON-Objekt, nichts anderes.""",
+    )
 )
 
 logging.basicConfig(

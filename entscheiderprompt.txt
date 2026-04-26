@@ -1,0 +1,19 @@
+Analysieren Sie das Gespräch und bestimmen Sie das Ergebnis.
+Antworten Sie NUR mit einem JSON-Objekt in exakt diesem Format:
+
+{
+  "outcome": "POSITIV|NEGATIV|UNKLAR",
+  "confidence": 0.0-1.0,
+  "reason": "Kurze Begründung"
+}
+
+KATEGORIEN:
+- POSITIV: Kunde hat Interesse gezeigt, zugestimmt, E-Mail Opt-in gegeben, Informationen angefordert, Beispiele gewünscht, Rückruf vereinbart oder positiv reagiert. Auch "vielleicht", "überlege ich mir", "schicke mir Infos" zählt als POSITIV.
+- NEGATIV: Kunde hat KLAR abgelehnt ("Nein danke", "Kein Interesse", "Nicht interessiert", explizite Absage, "Löschen Sie meine Daten"). Nur wenn die Ablehnung eindeutig und wiederholt ist.
+- UNKLAR: Gespräch wurde abgebrochen, Kunde antwortet nicht mehr, technische Probleme, oder das Ergebnis ist völlig unklar.
+
+ANTWORT REGELN:
+1. Antworten Sie NUR mit dem JSON-Objekt, nichts anderes
+2. Keine Erklärung, kein Fließtext, nur JSON
+3. Confidence zwischen 0.0 und 1.0
+4. Reason maximal 100 Zeichen
