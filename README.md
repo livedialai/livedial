@@ -13,6 +13,14 @@ Installs LiveKit Server, LiveKit CLI, LiveKit SIP Bridge, Docker, and Redis. Con
 ### `install-agent.sh`
 Sets up a Python voice agent with PM2 process manager. Installs required Python dependencies and configures the agent as a systemd service for automatic restart.
 
+### `install-enhanced-agent.sh`
+**Enhanced Agent + Dashboard** — upgrades the base agent with business logic ported from the Jambonz voice bot:
+- **ViciDial API integration**: automatically updates lead status after each call
+- **Decision LLM**: analyzes conversation outcome (POSITIV / NEGATIV / UNKLAR) and logs the result
+- **Hangup tool**: the agent can end the call on request
+- **Redis persistence**: call history and lead data stored for the dashboard
+- **Express Dashboard (Node.js)**: real-time analytics, call list, search, timeline, and transcript viewer with login protection
+
 ## ⚠️ Important: API Keys are Placeholders!
 
 The agent currently has placeholder keys configured after installation. You **must** edit the `.env` file and replace them with real API keys:
@@ -32,5 +40,10 @@ pm2 restart livekit-agent
 
 | File | Purpose |
 |------|---------|
-| `agent.py` | Python voice agent implementation |
+| `agent.py` | Python voice agent implementation (basic) |
+| `enhanced_agent.py` | Enhanced Python agent with ViciDial API, decision LLM, hangup tool, Redis persistence |
+| `dashboard/server.js` | Express dashboard server with auth, REST API, and analytics |
+| `dashboard/public/dashboard.html` | Dashboard UI (call list, transcripts, stats) |
+| `dashboard/public/login.html` | Login page for dashboard |
 | `ecosystem.config.js` | PM2 process configuration for the agent |
+| `install-enhanced-agent.sh` | Installer for the enhanced agent + dashboard |

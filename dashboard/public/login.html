@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — ViciAI Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-box {
+      background: #1e293b;
+      padding: 3rem;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      width: 100%;
+      max-width: 400px;
+    }
+    h1 { color: #f1f5f9; margin-bottom: 0.5rem; font-size: 2rem; }
+    p.sub { color: #94a3b8; margin-bottom: 2rem; }
+    .form-group { margin-bottom: 1.5rem; }
+    label { display: block; color: #cbd5e1; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 600; }
+    input {
+      width: 100%; padding: 0.75rem 1rem;
+      border: 1px solid #334155; border-radius: 8px;
+      background: #0f172a; color: #e2e8f0; font-size: 1rem;
+    }
+    input:focus { outline: none; border-color: #667eea; }
+    button {
+      width: 100%; padding: 0.875rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none; border-radius: 8px; color: white;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+      transition: transform 0.2s;
+    }
+    button:hover { transform: translateY(-2px); }
+    .error {
+      background: #991b1b; color: #fecaca;
+      padding: 0.75rem; border-radius: 8px;
+      margin-bottom: 1rem; font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>🤖 ViciAI</h1>
+    <p class="sub">Bitte melde dich an</p>
+    <% if (window.location.search.includes('error')) { %>
+    <!-- handled by JS below -->
+    <% } %>
+    <div id="errBox" style="display:none" class="error">❌ Falscher Benutzername oder Passwort</div>
+    <form method="POST" action="/login">
+      <div class="form-group">
+        <label for="username">Benutzername</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Passwort</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <button type="submit">Anmelden</button>
+    </form>
+  </div>
+  <script>
+    if (window.location.search.includes('error')) {
+      document.getElementById('errBox').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
