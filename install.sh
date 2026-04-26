@@ -98,6 +98,11 @@ for ini_file in /etc/php/7.4/apache2/php.ini /etc/php/7.4/cli/php.ini; do
     grep -q 'max_input_vars' "$ini_file" || echo "max_input_vars = 50000" >> "$ini_file"
 done
 
+# Apache MPM Fix für PHP 7.4 (Prefork erforderlich)
+a2dismod mpm_event 2>/dev/null || true
+a2dismod mpm_worker 2>/dev/null || true
+a2enmod mpm_prefork 2>/dev/null || true
+
 # Apache aktivieren
 a2enmod php7.4 rewrite ssl
 systemctl enable apache2
