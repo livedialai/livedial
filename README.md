@@ -1,21 +1,21 @@
 # Livedial
 
-VICIdial + LiveKit Setup Scripts for Debian 12
+VICIdial + LiveKit Installation for Debian 12
 
 ## Scripts
 
-| Script | Description |
-|--------|-------------|
-| `install.sh` | Full VICIdial installation: Asterisk 18, MariaDB, Apache, PHP 7.4, astguiclient, crontab, Screen-Session-Management |
-| `install-livekit.sh` | LiveKit Server + SIP Bridge + Docker + Redis |
-| `install-agent.sh` | Voice Agent Setup with PM2 |
-| `agent.py` | Python Voice Agent |
-| `ecosystem.config.js` | PM2 process configuration |
+### `install.sh`
+Full VICIdial installation for Debian 12. Includes Asterisk 18 (VICIdial fork), MariaDB, Apache, PHP 7.4, astguiclient, and all VICIdial components. Sets up crontab with all required maintenance jobs, Asterisk in Screen session for VICIdial compatibility, and logger configuration.
 
-## Key Features
+### `install-livekit.sh`
+Installs LiveKit Server, LiveKit CLI, LiveKit SIP Bridge, Docker, and Redis. Configures Redis with safe defaults and systemd timeout. Sets up a SIP trunk between LiveKit and the local Asterisk instance.
 
-- Asterisk runs in a Screen session (`screen -dmS asterisk`) for VICIdial compatibility
-- Redis configured with safe defaults (`dir /var/lib/redis`, `TimeoutStopSec=30`)
-- Comprehensive crontab with all VICIdial maintenance jobs
-- Auto-cleanup for stale screen sessions
-- All dependencies included (`libnet-telnet-perl` etc.)
+### `install-agent.sh`
+Sets up a Python voice agent with PM2 process manager. Installs required Python dependencies and configures the agent as a systemd service for automatic restart.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `agent.py` | Python voice agent implementation |
+| `ecosystem.config.js` | PM2 process configuration for the agent |
