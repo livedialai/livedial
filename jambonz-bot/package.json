@@ -1,0 +1,18 @@
+{
+  "name": "jambonz-bot",
+  "version": "1.0.0",
+  "description": "Jambonz Voice AI Agent",
+  "main": "jambonz-app.js",
+  "scripts": {
+    "start": "node jambonz-app.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-basic-auth": "^1.2.1",
+    "ioredis": "^5.4.2",
+    "nodemailer": "^8.0.7",
+    "openai": "^4.82.0",
+    "ws": "^8.18.0"
+  }
+}

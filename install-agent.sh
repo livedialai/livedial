@@ -1,5 +1,5 @@
 #!/bin/bash
-# install-agent.sh - Automated LiveKit Voice Agent Setup
+# install-agent.sh - Automated LiveKit Voice Agent Setup (openSUSE)
 # Idempotent: can be run multiple times safely.
 # Prompts for API keys and installs the agent with PM2.
 set -euo pipefail
@@ -50,17 +50,24 @@ read -r -p "Inworld Base URL [${_INWORLD_BASE_URL:-https://api.inworld.ai/v1}]: 
 INWORLD_BASE_URL="${INWORLD_BASE_URL:-${_INWORLD_BASE_URL:-https://api.inworld.ai/v1}}"
 
 # ------------------------------------------------------------------
-# Check prerequisites
+# Check prerequisites (openSUSE)
 # ------------------------------------------------------------------
-if ! command -v python3 &>/dev/null; then
-  apt-get update -qq && apt-get install -y -qq python3 python3-pip python3-venv >/dev/null 2>&1
+PYTHON_BIN=""
+for p in python3.11 python3; do
+  if command -v "$p" &>/dev/null; then
+    PYTHON_BIN="$p"
+    break
+  fi
+done
+if [ -z "$PYTHON_BIN" ]; then
+  zypper --non-interactive install python311
+  PYTHON_BIN="python3.11"
+fi
+if ! command -v npm &>/dev/null; then
+  zypper --non-interactive install nodejs20
 fi
 if ! command -v pm2 &>/dev/null; then
-  if command -v npm &>/dev/null; then
-    npm install -g pm2 >/dev/null 2>&1
-  else
-    apt-get install -y -qq npm >/dev/null 2>&1 && npm install -g pm2 >/dev/null 2>&1
-  fi
+  npm install -g pm2 >/dev/null 2>&1
 fi
 
 # ------------------------------------------------------------------
@@ -81,15 +88,15 @@ log "LiveKit API Secret: ${LK_API_SECRET:+***}"
 # ------------------------------------------------------------------
 mkdir -p "$AGENT_DIR/logs"
 
-if [ ! -d "$AGENT_DIR/.venv" ] || [ ! -x "$AGENT_DIR/.venv/bin/python3" ]; then
-  log "Erstelle Python venv..."
+if [ ! -d "$AGENT_DIR/.venv" ] || [ ! -x "$AGENT_DIR/.venv/bin/$PYTHON_BIN" ]; then
+  log "Erstelle Python venv (mit $PYTHON_BIN)..."
   rm -rf "$AGENT_DIR/.venv"
-  python3 -m venv "$AGENT_DIR/.venv"
+  $PYTHON_BIN -m venv "$AGENT_DIR/.venv"
 fi
 
 log "Installiere Agent-Abhängigkeiten..."
-"$AGENT_DIR/.venv/bin/pip" install -q -U pip setuptools wheel
-"$AGENT_DIR/.venv/bin/pip" install -q \
+"$AGENT_DIR/.venv/bin/$PYTHON_BIN" -m pip install -q -U pip setuptools wheel
+"$AGENT_DIR/.venv/bin/$PYTHON_BIN" -m pip install -q \
   "livekit-agents~=1.5" \
   "livekit-plugins-deepgram~=1.5" \
   "livekit-plugins-openai~=1.5" \
@@ -196,7 +203,7 @@ cat > "$AGENT_DIR/ecosystem.config.js" <<ECO
 module.exports = {
   apps: [{
     name: "livekit-agent",
-    script: "$AGENT_DIR/.venv/bin/python",
+    script: "$AGENT_DIR/.venv/bin/$PYTHON_BIN",
     args: "$AGENT_DIR/agent.py start",
     cwd: "$AGENT_DIR",
     watch: false,
@@ -224,7 +231,7 @@ After=network.target livekit.service
 Type=simple
 User=root
 WorkingDirectory=$AGENT_DIR
-ExecStart=$AGENT_DIR/.venv/bin/python agent.py start
+ExecStart=$AGENT_DIR/.venv/bin/$PYTHON_BIN agent.py start
 Restart=on-failure
 RestartSec=10
 Environment=LIVEKIT_URL=$LIVEKIT_URL
@@ -269,7 +276,7 @@ if [ -x "$LK_CLI" ] && [ -n "${LK_API_KEY:-}" ] && [ -n "${LK_API_SECRET:-}" ]; 
   done
 
   # Create new rule with agent_name using Python API
-  "$AGENT_DIR/.venv/bin/python3" - <<PYEOF
+  "$AGENT_DIR/.venv/bin/$PYTHON_BIN" - <<PYEOF
 import asyncio, sys
 try:
     from livekit.api import (
