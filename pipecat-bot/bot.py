@@ -19,6 +19,8 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.frames.frames import EndFrame, TranscriptionFrame, TTSTextFrame, TextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.runner.types import DailyDialinRequest, RunnerArguments
@@ -785,21 +787,28 @@ async def run_bot(transport, session):
         ),
     )
 
-    tools = []
+    tools_schema = []
     calendar_tools, calendar_handlers = get_calendar_tools(session)
     if calendar_tools:
-        tools.extend(calendar_tools)
+        tools_schema.extend(calendar_tools)
         for name, handler in calendar_handlers.items():
             llm.register_function(name, handler)
 
-    tools.append({"type": "function", "function": {"name": "firmenwissen", "description": "Durchsuche das Firmenwissen nach Informationen zu einem bestimmten Thema oder einer Frage. Nutze dies wenn der Kunde etwas zu deinen Produkten, Dienstleistungen oder dem Unternehmen fragt.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Die Suchanfrage"}}, "required": ["query"]}}})
+    tools_schema.append(FunctionSchema(
+        name="firmenwissen",
+        description="Durchsuche das Firmenwissen nach Informationen zu einem bestimmten Thema oder einer Frage. Nutze dies wenn der Kunde etwas zu deinen Produkten, Dienstleistungen oder dem Unternehmen fragt.",
+        properties={"query": {"type": "string", "description": "Die Suchanfrage"}},
+        required=["query"],
+    ))
     llm.register_function("firmenwissen", handle_firmenwissen)
 
-    tools.append({"type": "function", "function": {"name": "end_call", "description": "Beende das Telefongespraech und lege auf. Nutze dieses Tool NACHDEM du dich verabschiedet hast.", "parameters": {"type": "object", "properties": {}}}})
-    llm.register_function("end_call", handle_end_call)
-
     if session.dynamic_tools:
-        tools.append({"type": "function", "function": {"name": "execute_api_tool", "description": "Fuehre ein API-Tool aus. tool_name = Name des Tools, arguments = JSON-Objekt mit den Parametern.", "parameters": {"type": "object", "properties": {"tool_name": {"type": "string", "description": "Name des Tools"}, "arguments": {"type": "object", "description": "Parameter als JSON"}}, "required": ["tool_name"]}}})
+        tools_schema.append(FunctionSchema(
+            name="execute_api_tool",
+            description="Fuehre ein API-Tool aus. tool_name = Name des Tools, arguments = JSON-Objekt mit den Parametern.",
+            properties={"tool_name": {"type": "string", "description": "Name des Tools"}, "arguments": {"type": "object", "description": "Parameter als JSON"}},
+            required=["tool_name"],
+        ))
         llm.register_function("execute_api_tool", handle_execute_api_tool)
 
     messages = session.messages.copy()
@@ -808,7 +817,7 @@ async def run_bot(transport, session):
         messages[0]["content"] = "/no_think\n" + messages[0]["content"]
     messages.append(initial_prompt)
 
-    context = LLMContext(messages=messages, tools=tools if tools else None)
+    context = LLMContext(messages=messages, tools=ToolsSchema(standard_tools=tools_schema) if tools_schema else None)
     context_aggregator = LLMContextAggregatorPair(context)
 
     user_transcript = TranscriptProcessor(session, _event_bus)
@@ -824,6 +833,14 @@ async def run_bot(transport, session):
         await result_callback(json.dumps({"status": "call_ended"}))
         if task_ref:
             await task_ref[0].queue_frame(EndFrame())
+
+    tools_schema.append(FunctionSchema(
+        name="end_call",
+        description="Beende das Telefongespraech und lege auf. Nutze dieses Tool NACHDEM du dich verabschiedet hast.",
+        properties={},
+        required=[],
+    ))
+    llm.register_function("end_call", handle_end_call)
 
     pipeline = Pipeline([
         transport.input(),
