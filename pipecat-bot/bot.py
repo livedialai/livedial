@@ -22,7 +22,7 @@ from pipecat.frames.frames import EndFrame, TranscriptionFrame, TTSTextFrame, Te
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.adapters.schemas.function_schema import FunctionSchema
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.runner.types import DailyDialinRequest, RunnerArguments
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
@@ -791,7 +791,6 @@ async def run_bot(transport, session):
         tts = AzureHttpTTSService(
             api_key=tenant_tts_key,
             region=CONFIG["azure_tts_region"],
-            sample_rate=16000,
             settings=AzureHttpTTSService.Settings(
                 voice=tenant_tts_voice,
                 language="de-DE",
@@ -837,11 +836,10 @@ async def run_bot(transport, session):
     messages.append(initial_prompt)
 
     context = LLMContext(messages=messages, tools=ToolsSchema(standard_tools=tools_schema) if tools_schema else None)
-    context_aggregator = LLMContextAggregatorPair(context)
-
-    user_transcript = TranscriptProcessor(session, _event_bus)
-    assistant_transcript = AssistantTranscriptProcessor(session, _event_bus)
-    ssml_strip = SSMLStripProcessor()
+    context_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+    )
 
     await _event_bus.publish(session.call_sid, {"type": "call_start", "lead_id": session.lead_id})
 
@@ -864,11 +862,8 @@ async def run_bot(transport, session):
     pipeline = Pipeline([
         transport.input(),
         stt,
-        user_transcript,
         context_aggregator.user(),
         llm,
-        assistant_transcript,
-        ssml_strip,
         tts,
         transport.output(),
         context_aggregator.assistant(),
@@ -986,7 +981,6 @@ async def bot(runner_args):
                 ),
                 audio_in_enabled=True,
                 audio_out_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(),
             ),
         )
     else:
@@ -1000,7 +994,6 @@ async def bot(runner_args):
             DailyParams(
                 audio_in_enabled=True,
                 audio_out_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(),
             ),
         )
 
