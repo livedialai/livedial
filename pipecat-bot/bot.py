@@ -767,7 +767,7 @@ async def run_bot(transport, session):
             model=CONFIG["deepgram_model"],
             language=CONFIG["deepgram_language"],
             smart_format=True,
-            interim_results=True,
+            interim_results=False,
             utterance_end_ms="2000",
             vad_events=False,
             endpointing=500,
