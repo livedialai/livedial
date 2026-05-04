@@ -8,6 +8,7 @@ import smtplib
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from dotenv import load_dotenv
+load_dotenv()
 from loguru import logger
 import aiohttp
 import redis.asyncio as aioredis
@@ -26,6 +27,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.runner.types import DailyDialinRequest, RunnerArguments
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.inworld.tts import InworldTTSService
+from pipecat.services.azure.tts import AzureHttpTTSService
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.daily.transport import DailyDialinSettings, DailyParams, DailyTransport
 
@@ -46,6 +48,9 @@ CONFIG = {
     "inworld_voice_id": os.getenv("INWORLD_VOICE_ID", "default-gir-n2kfw-hbdko0a0q9lw__nadine-neu"),
     "inworld_language": os.getenv("INWORLD_LANGUAGE", "de"),
     "inworld_model": os.getenv("INWORLD_MODEL", "inworld-tts-1"),
+    "azure_tts_key": os.getenv("AZURE_TTS_KEY"),
+    "azure_tts_region": os.getenv("AZURE_TTS_REGION", "germanywestcentral"),
+    "azure_tts_voice": os.getenv("AZURE_TTS_VOICE", "de-DE-KatjaNeural"),
     "llm_api_key": os.getenv("LLM_API_KEY", "dummy"),
     "llm_base_url": os.getenv("LLM_BASE_URL"),
     "llm_model": os.getenv("LLM_MODEL", "qwen3"),
@@ -753,9 +758,7 @@ async def run_bot(transport, session):
     tenant_llm_key = tc.get("LLM_API_KEY", CONFIG["llm_api_key"])
     tenant_llm_base = tc.get("LLM_BASE_URL", CONFIG["llm_base_url"])
     tenant_llm_model = tc.get("LLM_MODEL", CONFIG["llm_model"])
-    tenant_tts_key = tc.get("TTS_API_KEY", CONFIG["inworld_api_key"])
-    tenant_tts_voice = tc.get("TTS_VOICE_ID", CONFIG["inworld_voice_id"])
-    tenant_tts_model = tc.get("TTS_MODEL", CONFIG["inworld_model"])
+    tts_provider = tc.get("TTS_PROVIDER", "azure").lower()
 
     stt = DeepgramSTTService(
         api_key=tenant_stt_key or CONFIG["deepgram_api_key"],
@@ -771,13 +774,29 @@ async def run_bot(transport, session):
         ),
     )
 
-    tts = InworldTTSService(
-        api_key=tenant_tts_key or CONFIG["inworld_api_key"],
-        settings=InworldTTSService.Settings(
-            voice=tenant_tts_voice or CONFIG["inworld_voice_id"],
-            model=tenant_tts_model or CONFIG["inworld_model"],
-        ),
-    )
+    if tts_provider == "inworld":
+        tenant_tts_key = tc.get("TTS_API_KEY", CONFIG["inworld_api_key"])
+        tenant_tts_voice = tc.get("TTS_VOICE_ID", CONFIG["inworld_voice_id"])
+        tenant_tts_model = tc.get("TTS_MODEL", CONFIG["inworld_model"])
+        tts = InworldTTSService(
+            api_key=tenant_tts_key,
+            settings=InworldTTSService.Settings(
+                voice=tenant_tts_voice,
+                model=tenant_tts_model,
+            ),
+        )
+    else:
+        tenant_tts_key = tc.get("TTS_API_KEY", CONFIG["azure_tts_key"])
+        tenant_tts_voice = tc.get("TTS_VOICE_ID", "de-DE-KatjaNeural")
+        tts = AzureHttpTTSService(
+            api_key=tenant_tts_key,
+            region=CONFIG["azure_tts_region"],
+            sample_rate=16000,
+            settings=AzureHttpTTSService.Settings(
+                voice=tenant_tts_voice,
+                language="de-DE",
+            ),
+        )
 
     llm = OpenAILLMService(
         api_key=tenant_llm_key,
