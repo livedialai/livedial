@@ -18,15 +18,18 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.frames.frames import EndFrame, TranscriptionFrame, TTSTextFrame, TextFrame
+from pipecat.frames.frames import EndFrame, LLMRunFrame, TranscriptionFrame, TTSTextFrame, TextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.transcriptions.language import Language
 from pipecat.runner.types import DailyDialinRequest, RunnerArguments
-from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
+from pipecat.services.azure.stt import AzureSTTService
+from pipecat.services.azure.tts import AzureHttpTTSService
 from pipecat.services.inworld.tts import InworldTTSService
+from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.azure.tts import AzureHttpTTSService
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.daily.transport import DailyDialinSettings, DailyParams, DailyTransport
@@ -41,6 +44,7 @@ CONFIG = {
     "dashboard_password": os.getenv("DASHBOARD_PASSWORD", "changeme123"),
     "dashboard_port": int(os.getenv("DASHBOARD_PORT", "8091")),
     "deepgram_api_key": os.getenv("DEEPGRAM_API_KEY"),
+    "mistral_api_key": os.getenv("MISTRAL_API_KEY", "8J9XjxCREn1XtHGpUXdiHIlmoi8KC3k7"),
     "deepgram_model": os.getenv("DEEPGRAM_MODEL", "nova-3"),
     "deepgram_language": os.getenv("DEEPGRAM_LANGUAGE", "de"),
     "deepgram_base_url": os.getenv("DEEPGRAM_BASE_URL", ""),
@@ -760,42 +764,23 @@ async def run_bot(transport, session):
     tenant_llm_model = tc.get("LLM_MODEL", CONFIG["llm_model"])
     tts_provider = tc.get("TTS_PROVIDER", "azure").lower()
 
-    stt = DeepgramSTTService(
-        api_key=tenant_stt_key or CONFIG["deepgram_api_key"],
-        base_url=CONFIG["deepgram_base_url"] or None,
-        live_options=LiveOptions(
-            model=CONFIG["deepgram_model"],
-            language=CONFIG["deepgram_language"],
-            smart_format=True,
-            interim_results=False,
-            utterance_end_ms="2000",
-            vad_events=False,
-            endpointing=500,
+    stt = AzureSTTService(
+        api_key=CONFIG["azure_tts_key"],
+        region=CONFIG["azure_tts_region"],
+        settings=AzureSTTService.Settings(
+            language=Language.DE_DE,
         ),
     )
 
-    if tts_provider == "inworld":
-        tenant_tts_key = tc.get("TTS_API_KEY", CONFIG["inworld_api_key"])
-        tenant_tts_voice = tc.get("TTS_VOICE_ID", CONFIG["inworld_voice_id"])
-        tenant_tts_model = tc.get("TTS_MODEL", CONFIG["inworld_model"])
-        tts = InworldTTSService(
-            api_key=tenant_tts_key,
-            settings=InworldTTSService.Settings(
-                voice=tenant_tts_voice,
-                model=tenant_tts_model,
-            ),
-        )
-    else:
-        tenant_tts_key = tc.get("TTS_API_KEY", CONFIG["azure_tts_key"])
-        tenant_tts_voice = tc.get("TTS_VOICE_ID", "de-DE-KatjaNeural")
-        tts = AzureHttpTTSService(
-            api_key=tenant_tts_key,
-            region=CONFIG["azure_tts_region"],
-            settings=AzureHttpTTSService.Settings(
-                voice=tenant_tts_voice,
-                language="de-DE",
-            ),
-        )
+    tts = AzureHttpTTSService(
+        api_key=CONFIG["azure_tts_key"],
+        region=CONFIG["azure_tts_region"],
+        settings=AzureHttpTTSService.Settings(
+            voice="de-DE-SeraphinaMultilingualNeural",
+            language="de-DE",
+        ),
+    )
+
 
     llm = OpenAILLMService(
         api_key=tenant_llm_key,
@@ -887,6 +872,7 @@ async def run_bot(transport, session):
         logger.info(f"[{session.call_sid}] Teilnehmer joined: {participant['id']}")
         await transport.capture_participant_transcription(participant["id"])
         await context_aggregator.user().push_context_frame()
+        await task.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_participant_left")
     async def on_participant_left(transport, participant, reason):
