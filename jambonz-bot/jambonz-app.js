@@ -65,6 +65,9 @@ const CONFIG = {
   
   hold_music_url: process.env.HOLD_MUSIC_URL || '',
 
+  tts_vendor: process.env.TTS_VENDOR || '',
+  tts_voice_id: process.env.TTS_VOICE_ID || '',
+
   webhook_secret: process.env.WEBHOOK_SECRET || '',
 };
 
@@ -87,6 +90,24 @@ function stripMarkup(text) {
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+function sayVerb(text, session) {
+  const say = { verb: 'say', text };
+  if (session && session.tts_vendor) {
+    say.synthesizer = { vendor: session.tts_vendor };
+    if (session.tts_voice_id) say.synthesizer.voice = session.tts_voice_id;
+  }
+  return say;
+}
+
+function sayTTS(text, session) {
+  const obj = { text };
+  if (session && session.tts_vendor) {
+    obj.synthesizer = { vendor: session.tts_vendor };
+    if (session.tts_voice_id) obj.synthesizer.voice = session.tts_voice_id;
+  }
+  return obj;
 }
 
 function buildExtraParams() {
@@ -584,6 +605,8 @@ class CallSession {
     this.llm_api_key = CONFIG.llm_api_key;
     this.llm_base_url = CONFIG.llm_base_url;
     this.llm_model = CONFIG.llm_model;
+    this.tts_vendor = CONFIG.tts_vendor || '';
+    this.tts_voice_id = CONFIG.tts_voice_id || '';
     this.smtp_host = CONFIG.smtp_host;
     this.smtp_port = CONFIG.smtp_port;
     this.smtp_user = CONFIG.smtp_user;
@@ -963,6 +986,8 @@ app.post('/calling', requireWebhookAuth, async (req, res) => {
   if (tenantConfig.SMTP_PASS) session.smtp_pass = tenantConfig.SMTP_PASS;
   if (tenantConfig.SMTP_FROM) session.smtp_from = tenantConfig.SMTP_FROM;
   if (tenantConfig.EMAIL_TO) session.email_to = tenantConfig.EMAIL_TO;
+  if (tenantConfig.TTS_VENDOR) session.tts_vendor = tenantConfig.TTS_VENDOR;
+  if (tenantConfig.TTS_VOICE_ID) session.tts_voice_id = tenantConfig.TTS_VOICE_ID;
 
   session.meetergo_config.enabled = tenantConfig.MEETERGO_ENABLED || (CONFIG.calendar_enabled ? 'true' : 'false');
   session.meetergo_config.user_id = tenantConfig.MEETERGO_USER_ID || CONFIG.meetergo_host_id;
@@ -1046,7 +1071,7 @@ app.post('/calling', requireWebhookAuth, async (req, res) => {
     input: ['speech'], 
     actionHook: '/actionHook', 
     timeout: 30, 
-    say: { text: greetingText }, 
+    say: sayTTS(greetingText, session), 
     listenDuringPrompt: true 
   }]);
 });
@@ -1061,7 +1086,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
   if (session.duration > CONFIG.max_call_duration) {
     console.log(`[${callSid}] Max duration exceeded`);
     await session.finalize();
-    return res.json([{ verb: 'say', text: 'Das Gespräch wurde beendet.' }, { verb: 'hangup' }]);
+    return res.json([sayVerb('Das Gespräch wurde beendet.', session), { verb: 'hangup' }]);
   }
 
   if (session.transfer_state !== 'idle') {
@@ -1098,7 +1123,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
     }
 
     if (session.transfer_state === 'agent_connected') {
-      return res.json([{ verb: 'say', text: 'Sie werden verbunden.' }]);
+      return res.json([sayVerb('Sie werden verbunden.', session)]);
     }
   }
 
@@ -1108,7 +1133,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
       input: ['speech'], 
       actionHook: '/actionHook', 
       timeout: 30, 
-      say: { text: 'Sind Sie noch da?' }, 
+      say: sayTTS('Sind Sie noch da?', session), 
       listenDuringPrompt: true 
     }]);
   }
@@ -1179,7 +1204,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
         const introText = 'Einen Moment bitte, ich verbinde Sie mit einem Kollegen.';
         session.addMessage('assistant', introText);
         return res.json([
-          { verb: 'say', text: introText },
+          sayVerb(introText, session),
           { verb: 'redirect', actionHook: '/actionHook' }
         ]);
       }
@@ -1205,7 +1230,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
         input: ['speech'], 
         actionHook: '/actionHook', 
         timeout: 30, 
-        say: { text: followUpText || 'Kann ich sonst noch helfen?' }, 
+        say: sayTTS(followUpText || 'Kann ich sonst noch helfen?', session), 
         listenDuringPrompt: true 
       }]);
     }
@@ -1219,13 +1244,13 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
       input: ['speech'], 
       actionHook: '/actionHook', 
       timeout: 30, 
-      say: { text: text || 'Kann ich noch helfen?' }, 
+      say: sayTTS(text || 'Kann ich noch helfen?', session), 
       listenDuringPrompt: true 
     }]);
     
   } catch (e) {
     console.error(`[${callSid}] LLM Fehler: ${e.message}`);
-    res.json([{ verb: 'say', text: 'Entschuldigung, es gab ein technisches Problem.' }, { verb: 'hangup' }]);
+    res.json([sayVerb('Entschuldigung, es gab ein technisches Problem.', session), { verb: 'hangup' }]);
   }
 });
 
@@ -1258,8 +1283,8 @@ app.post('/agentHook', requireWebhookAuth, async (req, res) => {
     if (customerSession.transfer_variant === 'consult') {
       const intro = `Anrufer ${customerSession.from}. ${customerSession.context_summary || 'Keine Zusammenfassung.'} Drücken Sie 1 zum Übernehmen.`;
       return res.json([
-        { verb: 'say', text: intro },
-        { verb: 'gather', input: ['dtmf'], timeout: 15, say: { text: 'Zum Übernehmen drücken Sie die 1.' }, actionHook: '/agentDtmfHook', numDigits: 1 }
+        sayVerb(intro, customerSession),
+        { verb: 'gather', input: ['dtmf'], timeout: 15, say: sayTTS('Zum Übernehmen drücken Sie die 1.', customerSession), actionHook: '/agentDtmfHook', numDigits: 1 }
       ]);
     }
 
@@ -1278,7 +1303,7 @@ app.post('/agentHook', requireWebhookAuth, async (req, res) => {
     }
 
     await customerSession.connectCustomerToAgent();
-    return res.json([{ verb: 'say', text: 'Sie werden mit dem Anrufer verbunden.' }]);
+    return res.json([sayVerb('Sie werden mit dem Anrufer verbunden.', customerSession)]);
   }
 
   if (callStatus === 'completed' || callStatus === 'failed' || callStatus === 'no-answer' || callStatus === 'busy') {
@@ -1306,7 +1331,7 @@ app.post('/agentDtmfHook', requireWebhookAuth, async (req, res) => {
 
   if (dtmf === '1') {
     await customerSession.connectCustomerToAgent();
-    return res.json([{ verb: 'say', text: 'Sie werden verbunden.' }]);
+    return res.json([sayVerb('Sie werden verbunden.', customerSession)]);
   } else {
     await customerSession.fallbackToBot();
     return res.json([{ verb: 'hangup' }]);
