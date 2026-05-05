@@ -94,18 +94,22 @@ function stripMarkup(text) {
 
 function sayVerb(text, session) {
   const say = { verb: 'say', text };
-  if (session && session.tts_vendor) {
-    say.synthesizer = { vendor: session.tts_vendor };
-    if (session.tts_voice_id) say.synthesizer.voice = session.tts_voice_id;
+  const vendor = (session && session.tts_vendor) || CONFIG.tts_vendor;
+  const voice = (session && session.tts_voice_id) || CONFIG.tts_voice_id;
+  if (vendor) {
+    say.synthesizer = { vendor };
+    if (voice) say.synthesizer.voice = voice;
   }
   return say;
 }
 
 function sayTTS(text, session) {
   const obj = { text };
-  if (session && session.tts_vendor) {
-    obj.synthesizer = { vendor: session.tts_vendor };
-    if (session.tts_voice_id) obj.synthesizer.voice = session.tts_voice_id;
+  const vendor = (session && session.tts_vendor) || CONFIG.tts_vendor;
+  const voice = (session && session.tts_voice_id) || CONFIG.tts_voice_id;
+  if (vendor) {
+    obj.synthesizer = { vendor };
+    if (voice) obj.synthesizer.voice = voice;
   }
   return obj;
 }
