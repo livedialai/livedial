@@ -689,6 +689,32 @@ class CallSession {
 const sessions = new Map();
 
 // ══════════════════════════════════════════════════════════════════
+//  CONTACT LOOKUP (Forward Routes)
+// ══════════════════════════════════════════════════════════════════
+async function resolveContact(name, apiKey) {
+  const headers = apiKey ? { 'X-API-Key': apiKey } : {};
+  try {
+    const resp = await fetch(`${CONFIG.backend_url}/api/settings/forwards/resolve?name=${encodeURIComponent(name)}`, {
+      headers,
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return { number: data.destination, trunk_id: data.trunk_id };
+  } catch (e) {
+    console.warn(`[Contact] Lookup failed for '${name}': ${e.message}`);
+    return null;
+  }
+}
+
+async function lookupContactByName(name, session) {
+  const apiKey = session.tenant_config?.ha_api_key || CONFIG.ha_api_key;
+  const contact = await resolveContact(name, apiKey);
+  if (!contact) return `Kein Kontakt mit dem Namen "${name}" gefunden.`;
+  return `Kontakt "${name}" gefunden: ${contact.number}`;
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  GET TOOLS
 // ══════════════════════════════════════════════════════════════════
 function getTools(session) {
@@ -716,8 +742,24 @@ function getTools(session) {
     {
       type: 'function',
       function: {
+        name: 'kontakt_suchen',
+        description: 'Suche einen Mitarbeiter/Kontakt im Adressbuch und gib seine Telefonnummer zurueck. Verwende dies bevor du einen Transfer mit Namen durchfuehrst.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Name des Mitarbeiters/Kontakts (z.B. "Herr Schmitz", "Thomas", "Support")' }
+          },
+          required: ['name']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
         name: 'transfer_call',
         description: `Verbinde den Anrufer mit einem Agenten.
+Du kannst entweder eine Telefonnummer (agent_number) oder einen Namen aus dem Adressbuch angeben.
+Wenn du einen Namen verwenden willst, rufe zuerst "kontakt_suchen" auf um die Nummer zu ermitteln.
 Varianten:
 - "cold": sofort durchstellen (keine Vorankündigung)
 - "warm": vor dem Verbinden eine kurze Ansage sprechen
@@ -799,6 +841,9 @@ async function executeTool(name, args, session) {
       
     case 'firmenwissen':
       return await queryKnowledge(args.query, session.tenant_config?.ha_api_key || CONFIG.ha_api_key);
+      
+    case 'kontakt_suchen':
+      return await lookupContactByName(args.name, session);
       
     case 'transfer_call':
       return await handleTransfer(args, session);
