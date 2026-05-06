@@ -47,3 +47,40 @@ pm2 restart livekit-agent
 | `dashboard/public/login.html` | Login page for dashboard |
 | `ecosystem.config.js` | PM2 process configuration for the agent |
 | `install-enhanced-agent.sh` | Installer for the enhanced agent + dashboard |
+
+## Jambonz Voice Bot (`jambonz-bot/`)
+
+### PM2 Prozesse
+
+| Name | Status | Beschreibung |
+|------|--------|-------------|
+| `jambonz-working` | gestoppt | Alte Version ohne TTS-Override |
+| `jambonz-tts` | **aktiv** | Produktiv-Version mit TTS-Voice-Override |
+
+### TTS Voice pro Tenant
+
+Die App kann pro Tenant eine andere Inworld-TTS-Stimme setzen.  
+Das Backend liefert `TTS_VOICE_ID` aus der Tenant-Config – der Code setzt dann einen separaten `say`-Verb mit `synthesizer` vor jedem `gather`.
+
+**Format:**
+```json
+{
+  "verb": "say",
+  "text": "...",
+  "synthesizer": {
+    "vendor": "inworld",
+    "label": "inworldgofonia",
+    "voice": "Loretta"
+  }
+}
+```
+
+Wichtig: Der `synthesizer` muss in einem **separaten** `say`-Verb stehen (nicht im `say`-Objekt des `gather`).  
+Das `gather` danach hat **kein** eigenes `say` mehr, sondern nur `listenDuringPrompt: true`.
+
+**Backup der Produktiv-Datei:**
+```
+jambonz-bot/jambonz-app.js.PRODUKTIV-TTS-LORETTA_20260506_214336
+```
+
+**Fallback:** Alte Version starten mit `pm2 start jambonz-working`

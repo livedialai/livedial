@@ -65,6 +65,9 @@ const CONFIG = {
   
   hold_music_url: process.env.HOLD_MUSIC_URL || '',
 
+  tts_vendor: process.env.TTS_VENDOR || '',
+  tts_voice_id: process.env.TTS_VOICE_ID || '',
+
   webhook_secret: process.env.WEBHOOK_SECRET || '',
 };
 
@@ -91,6 +94,25 @@ function stripMarkup(text) {
 
 function buildExtraParams() {
   return CONFIG.llm_no_think ? { extra_body: { chat_template_kwargs: { enable_thinking: false } } } : {};
+}
+
+function sayVerb(text, session) {
+  const say = { verb: 'say', text };
+  const si = (session && session.tts_voice_id) || CONFIG.tts_voice_id;
+  const sl = (session && session.tts_label) || 'inworldgofonia';
+  if (si) {
+    say.synthesizer = { vendor: 'inworld', label: sl, voice: si };
+    console.log(`[TTS] label="${sl}" voice="${si}"`);
+  }
+  return say;
+}
+
+function sayTTS(text, session) {
+  const obj = { text };
+  const si = (session && session.tts_voice_id) || CONFIG.tts_voice_id;
+  const sl = (session && session.tts_label) || 'inworldgofonia';
+  if (si) obj.synthesizer = { vendor: 'inworld', label: sl, voice: si };
+  return obj;
 }
 
 function getGermanTimezoneOffset() {
@@ -590,6 +612,9 @@ class CallSession {
     this.smtp_pass = CONFIG.smtp_pass;
     this.smtp_from = CONFIG.smtp_from;
     this.email_to = CONFIG.email_to;
+    this.tts_vendor = CONFIG.tts_vendor || '';
+    this.tts_voice_id = CONFIG.tts_voice_id || '';
+    this.tts_label = '';
     
     this.messages = [];
   }
@@ -896,7 +921,7 @@ app.post('/enqueueHook', requireWebhookAuth, async (req, res) => {
 app.post('/calling', requireWebhookAuth, async (req, res) => {
   const callSid = req.body.call_sid;
   const from = req.body.from || '';
-  const callerName = req.body.caller_name || '';
+  const callerName = (req.body.caller_name || '').replace(/^"|"$/g, '');
   const leadId = callerName || from.replace('sip:', '').split('@')[0] || '';
   
   const session = new CallSession(callSid, leadId, from);
@@ -906,7 +931,9 @@ app.post('/calling', requireWebhookAuth, async (req, res) => {
   session.called_did = calledDid;
   console.log(`[${callSid}] Neuer Anruf von ${from} an ${calledDid} (Lead: ${leadId})`);
 
-  const tenantConfig = await resolveTenantConfig(calledDid);
+  const tenantLookup = callerName || calledDid;
+  const tenantConfig = await resolveTenantConfig(tenantLookup);
+  console.log(`[${callSid}] Tenant lookup by "${tenantLookup}"`);
   session.tenant_config = tenantConfig;
 
   if (tenantConfig.LLM_API_KEY) session.llm_api_key = tenantConfig.LLM_API_KEY;
@@ -918,6 +945,10 @@ app.post('/calling', requireWebhookAuth, async (req, res) => {
   if (tenantConfig.SMTP_PASS) session.smtp_pass = tenantConfig.SMTP_PASS;
   if (tenantConfig.SMTP_FROM) session.smtp_from = tenantConfig.SMTP_FROM;
   if (tenantConfig.EMAIL_TO) session.email_to = tenantConfig.EMAIL_TO;
+  if (tenantConfig.TTS_VENDOR) session.tts_vendor = tenantConfig.TTS_VENDOR;
+  else if (tenantConfig.TTS_PROVIDER) session.tts_vendor = tenantConfig.TTS_PROVIDER;
+  if (tenantConfig.TTS_VOICE_ID) session.tts_voice_id = tenantConfig.TTS_VOICE_ID;
+  if (tenantConfig.TTS_LABEL) session.tts_label = tenantConfig.TTS_LABEL;
 
   session.meetergo_config.enabled = tenantConfig.MEETERGO_ENABLED || (CONFIG.calendar_enabled ? 'true' : 'false');
   session.meetergo_config.user_id = tenantConfig.MEETERGO_USER_ID || CONFIG.meetergo_host_id;
@@ -996,14 +1027,15 @@ app.post('/calling', requireWebhookAuth, async (req, res) => {
   }
 
   console.log(`[${callSid}] Bot: ${greetingText}`);
-  res.json([{ 
-    verb: 'gather', 
-    input: ['speech'], 
-    actionHook: '/actionHook', 
-    timeout: 30, 
-    say: { text: greetingText }, 
-    listenDuringPrompt: true 
-  }]);
+  const si = (session && session.tts_voice_id) || CONFIG.tts_voice_id;
+  if (!si) {
+    res.json([{ verb: 'gather', input: ['speech'], actionHook: '/actionHook', timeout: 30, say: { text: greetingText }, listenDuringPrompt: true }]);
+  } else {
+    res.json([
+      sayVerb(greetingText, session),
+      { verb: 'gather', input: ['speech'], actionHook: '/actionHook', timeout: 30, listenDuringPrompt: true }
+    ]);
+  }
 });
 
 app.post('/actionHook', requireWebhookAuth, async (req, res) => {
@@ -1016,7 +1048,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
   if (session.duration > CONFIG.max_call_duration) {
     console.log(`[${callSid}] Max duration exceeded`);
     await session.finalize();
-    return res.json([{ verb: 'say', text: 'Das Gespräch wurde beendet.' }, { verb: 'hangup' }]);
+    return res.json([sayVerb('Das Gespräch wurde beendet.', session), { verb: 'hangup' }]);
   }
 
   if (session.transfer_state !== 'idle') {
@@ -1053,19 +1085,15 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
     }
 
     if (session.transfer_state === 'agent_connected') {
-      return res.json([{ verb: 'say', text: 'Sie werden verbunden.' }]);
+      return res.json([sayVerb('Sie werden verbunden.', session)]);
     }
   }
 
   if (reason === 'timeout' || reason === 'no-input') {
-    return res.json([{ 
-      verb: 'gather', 
-      input: ['speech'], 
-      actionHook: '/actionHook', 
-      timeout: 30, 
-      say: { text: 'Sind Sie noch da?' }, 
-      listenDuringPrompt: true 
-    }]);
+    return res.json([
+      sayVerb('Sind Sie noch da?', session),
+      { verb: 'gather', input: ['speech'], actionHook: '/actionHook', timeout: 30, listenDuringPrompt: true }
+    ]);
   }
 
   const speechResult = req.body.speech?.alternatives?.[0]?.transcript;
@@ -1134,7 +1162,7 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
         const introText = 'Einen Moment bitte, ich verbinde Sie mit einem Kollegen.';
         session.addMessage('assistant', introText);
         return res.json([
-          { verb: 'say', text: introText },
+          sayVerb(introText, session),
           { verb: 'redirect', actionHook: '/actionHook' }
         ]);
       }
@@ -1155,32 +1183,24 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
       const followUpText = stripMarkup(followUp.choices[0].message.content || '');
       if (followUpText) session.addMessage('assistant', followUpText);
       
-      return res.json([{ 
-        verb: 'gather', 
-        input: ['speech'], 
-        actionHook: '/actionHook', 
-        timeout: 30, 
-        say: { text: followUpText || 'Kann ich sonst noch helfen?' }, 
-        listenDuringPrompt: true 
-      }]);
+      return res.json([
+        sayVerb(followUpText || 'Kann ich sonst noch helfen?', session),
+        { verb: 'gather', input: ['speech'], actionHook: '/actionHook', timeout: 30, listenDuringPrompt: true }
+      ]);
     }
 
     const text = stripMarkup(message.content || '');
     if (text) session.addMessage('assistant', text);
     console.log(`[${callSid}] Bot: ${text}`);
     
-    res.json([{ 
-      verb: 'gather', 
-      input: ['speech'], 
-      actionHook: '/actionHook', 
-      timeout: 30, 
-      say: { text: text || 'Kann ich noch helfen?' }, 
-      listenDuringPrompt: true 
-    }]);
+    res.json([
+      sayVerb(text || 'Kann ich noch helfen?', session),
+      { verb: 'gather', input: ['speech'], actionHook: '/actionHook', timeout: 30, listenDuringPrompt: true }
+    ]);
     
   } catch (e) {
     console.error(`[${callSid}] LLM Fehler: ${e.message}`);
-    res.json([{ verb: 'say', text: 'Entschuldigung, es gab ein technisches Problem.' }, { verb: 'hangup' }]);
+    res.json([sayVerb('Entschuldigung, es gab ein technisches Problem.', session), { verb: 'hangup' }]);
   }
 });
 
@@ -1213,8 +1233,9 @@ app.post('/agentHook', requireWebhookAuth, async (req, res) => {
     if (customerSession.transfer_variant === 'consult') {
       const intro = `Anrufer ${customerSession.from}. ${customerSession.context_summary || 'Keine Zusammenfassung.'} Drücken Sie 1 zum Übernehmen.`;
       return res.json([
-        { verb: 'say', text: intro },
-        { verb: 'gather', input: ['dtmf'], timeout: 15, say: { text: 'Zum Übernehmen drücken Sie die 1.' }, actionHook: '/agentDtmfHook', numDigits: 1 }
+        sayVerb(intro, customerSession),
+        sayVerb('Zum Übernehmen drücken Sie die 1.', customerSession),
+        { verb: 'gather', input: ['dtmf'], timeout: 15, actionHook: '/agentDtmfHook', numDigits: 1 }
       ]);
     }
 
@@ -1233,7 +1254,7 @@ app.post('/agentHook', requireWebhookAuth, async (req, res) => {
     }
 
     await customerSession.connectCustomerToAgent();
-    return res.json([{ verb: 'say', text: 'Sie werden mit dem Anrufer verbunden.' }]);
+    return res.json([sayVerb('Sie werden mit dem Anrufer verbunden.', customerSession)]);
   }
 
   if (callStatus === 'completed' || callStatus === 'failed' || callStatus === 'no-answer' || callStatus === 'busy') {
@@ -1261,7 +1282,7 @@ app.post('/agentDtmfHook', requireWebhookAuth, async (req, res) => {
 
   if (dtmf === '1') {
     await customerSession.connectCustomerToAgent();
-    return res.json([{ verb: 'say', text: 'Sie werden verbunden.' }]);
+    return res.json([sayVerb('Sie werden verbunden.', customerSession)]);
   } else {
     await customerSession.fallbackToBot();
     return res.json([{ verb: 'hangup' }]);
