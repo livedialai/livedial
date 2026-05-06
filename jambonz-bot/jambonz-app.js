@@ -603,6 +603,7 @@ class CallSession {
     this.queue_name = null;
     this.context_summary = '';
     
+    this.timeout_count = 0;
     this.llm_api_key = CONFIG.llm_api_key;
     this.llm_base_url = CONFIG.llm_base_url;
     this.llm_model = CONFIG.llm_model;
@@ -1090,14 +1091,23 @@ app.post('/actionHook', requireWebhookAuth, async (req, res) => {
   }
 
   if (reason === 'timeout' || reason === 'no-input') {
+    session.timeout_count++;
+    if (session.timeout_count >= 2) {
+      await session.finalize();
+      return res.json([
+        sayVerb('Ich kann Sie leider nicht hören. Bitte rufen Sie uns gerne zurück. Auf Wiederhören!', session),
+        { verb: 'hangup' }
+      ]);
+    }
     return res.json([
-      sayVerb('Sind Sie noch da?', session),
+      sayVerb('Sind Sie noch da? Ich habe Sie kurz nicht verstanden.', session),
       { verb: 'gather', input: ['speech'], actionHook: '/actionHook', timeout: 30, listenDuringPrompt: true }
     ]);
   }
 
   const speechResult = req.body.speech?.alternatives?.[0]?.transcript;
   if (speechResult) {
+    session.timeout_count = 0;
     console.log(`[${callSid}] Kunde: ${speechResult}`);
     session.addMessage('user', speechResult);
   } else if (reason !== 'speechDetected') {
